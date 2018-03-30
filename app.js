@@ -14,13 +14,13 @@ app.use(validator());
 
 app.get('/',(req, res) => res.send('Hello world! My first Node app.'))
 
-app.get('/transactions', (req, res) => {
-	//Connect to DB
+app.get('/transactions1', (req, res) => {
+	//Connect to DB Done
 	//Handle transfer two times
-	//Handle database unavailability (With a transactional rollback)
+	//Handle database unavailability (With a transactional rollback) Done
 	//TWo people transfer to the same third person(Try with a test case?)
-	//Validate request data
-	//Use async await
+	//Validate request data Done
+	//Use async await Done
 	//console.log("Request "+JSON.stringify(req.body));	
 	checkifAccountExists(req.body.from)
 	getBalances().then(result =>{
@@ -29,36 +29,36 @@ app.get('/transactions', (req, res) => {
 	
 })
 
-app.post('/transactions1', asyncMiddleware( async(req,res,next)=>{
+app.post('/transactions', asyncMiddleware( async(req,res,next)=>{
 	req.checkBody("from", "Enter a valid email address.").isEmail().exists();
 	req.checkBody("to","Enter a valid email address.").isEmail().exists();
-	req.checkBody("amount","Amount should be a number").exists();
+	req.checkBody("amount","Amount should be a number").isDecimal().exists();
 	var errors = req.validationErrors();
 	if (errors) {
     res.send(errors);
     return;
   	} 
 	// const user = await getBalances().then(alert);
-	checkifAccountExists(req.body.from,req.body.amount)
-	.then(result=>{
-		if(result!=null&&result!==undefined){
-			checkifAccountExists(req.body.to,0).then(result=>{
-				if(result!=null&&result!==undefined){
-					//res.send("Both accounts exist");
-					console.log("Both accounts exist");
+	if(req.body.amount>1){
+	var checkifFromExistsWithBalance = checkifAccountExists(req.body.from,req.body.amount);
+	var checkifToAccountExists = checkifAccountExists(req.body.to,0);
+	Promise.all([checkifFromExistsWithBalance,checkifToAccountExists]).then(function(values){
+		if(values[0]&&values[1]){
 					updateBalance(req.body).then(result=>{
-						console.log("Result came till here "+JSON.stringify(result));
 						res.send(result);
+					}).catch(err=>{
+						res.send(err);
 					})
-				}else{
-					res.send("To account doesn't exist");
-				}
-			})
 		}else{
-			res.send("from account doesn't exist");
+			res.send("check account numbers and balances");	
 		}
-	});
-	
+	}).catch(err => {
+    console.error(err);
+    res.send(err); 
+  });
+	}else{
+		res.send("Amount value not set right")
+	}
 }));
 
 function updateBalance(request){
@@ -66,7 +66,8 @@ function updateBalance(request){
 		 try{
 		 pool.getConnection(function(err, connection) {
 		 	connection.beginTransaction(function(err){
-		 		if (err) {                  //Transaction Error (Rollback and release connection)
+		 		if (err) {          
+		 		console.log("Couldn't begin transaction");        //Transaction Error (Rollback and release connection)
             	connection.rollback(function() {
                 connection.release();
                 reject(err);
@@ -77,8 +78,9 @@ function updateBalance(request){
 		 		let result1 = connection.query("UPDATE balances SET balances.balance = balances.balance-"
 		 		+request.amount+" where balances.accountNumber = '"+request.from+"'",function(error,result1){
 		 			if(error){
+		 				console.log("Error while updating to balances table fromAccount;Roll back");
 		 				return connection.rollback(function() {
-        					throw error;
+        					//throw error;
         					reject(err);
       						});
 		 				}
@@ -86,8 +88,9 @@ function updateBalance(request){
 		 		result2 = connection.query("UPDATE balances SET balances.balance = balances.balance+"
 		 		+request.amount+" where balances.accountNumber = '"+request.to+"'",function(error,result2){
 		 			if(error){
+		 				console.log("Error while updating to balances table for toAccount;Roll back");
 		 				return connection.rollback(function() {
-        					throw error;
+        					//throw error;
         					reject(err);
       						});
 		 				}
@@ -95,38 +98,42 @@ function updateBalance(request){
 		 		const referenceNo = uuidv1();
 		 		result3 = connection.query("insert into transactions (transactionRef,amount,fromAccount,toAccount,transactionDate) values('"+referenceNo+"',"+request.amount+",'"+request.from+"','"+request.to+"',CURRENT_TIMESTAMP());",function(error,result3){
 		 			if(error){
+		 				console.log("Error while inserting to Transaction table;Roll back");
 		 				return connection.rollback(function() {
-        					throw error;
+        					//throw error;
         					reject(err);
       						});
 		 				}
 		 				console.log(JSON.stringify(result3));
 		 		connection.commit(function(err) {
         		   if (err) {
+        		   	console.log("Couldn't commit transaction;Roll back");
           			return connection.rollback(function() {
-            		  throw err;
+            		  //throw err;
             		  reject(err);
           			 });
         			}
         			console.log('success!');
         			let response = connection.query("select * from transactions where transactions.transactionRef='"+referenceNo+"';", function(error,result,fields){
         				//console.log(response);
+        				if(error){
+        					console.log("Transaction saved but couldn't fetch details.");
+        					resolve("Transaction saved but couldn't fetch details.");
+        				}
         				console.log(JSON.stringify(result));
         				resolve(result);
         			});
-        			//resolve([result1,result2]);
       			});
 		 				
 		 	});
 		 				
 		 });
 		});
-		 		//resolve([result1,result2,result3]);
-		 		
-	});
-		 });
-		
+	   });
+	});	
 	}catch(err){
+		console.log("Error");
+		console.log(err);
 		throw new Error(err);
 		reject(err);
 		}
@@ -140,7 +147,6 @@ function checkifAccountExists(id,amount){
 		 	//console.log("Result "+JSON.stringify(result[0]));
 		 	resolve(result[0]);
 		 }catch(err){
-		 	throw new Error(err);
 		 	reject(err);
 		 }
 	});
@@ -153,7 +159,6 @@ function getBalances(){
 		 	//console.log("Result "+JSON.stringify(result[0]));
 		 	resolve(result[0]);
 		 }catch(err){
-		 	throw new Error(err);
 		 	reject(err);
 		 }
 	});
