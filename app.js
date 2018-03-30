@@ -20,7 +20,7 @@ app.post('/transactions', asyncMiddleware( async(req,res,next)=>{
 	req.checkBody("amount","Amount should be a number").isDecimal().exists();
 	var errors = req.validationErrors();
 	if (errors) {
-    res.send(errors);
+    res.send({ "errors" : errors});
     return;
   	} 
 	// const user = await getBalances().then(alert);
@@ -32,17 +32,17 @@ app.post('/transactions', asyncMiddleware( async(req,res,next)=>{
 					updateBalance(req.body).then(result=>{
 						res.send(result);
 					}).catch(err=>{
-						res.send(err);
+						res.send({"errors" :err});
 					})
 		}else{
 			res.send("check account numbers and balances");	
 		}
 	}).catch(err => {
     console.error(err);
-    res.send(err); 
+    res.send({"errors" :err}); 
   });
 	}else{
-		res.send("Amount value not set right")
+		res.send({ "error ": "Amount value not set right"})
 	}
 }));
 
@@ -67,7 +67,7 @@ function updateBalance(request){
 							resolve(response);
 						});
 					})).catch(function (err) { // <- See this <<<<<<<<
-        				return res.send(err);
+        				reject(err)
     				});
 				});
 			});
