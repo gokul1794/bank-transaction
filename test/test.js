@@ -10,8 +10,7 @@ var should = require('chai').should(),
 
 describe('Tests', function() {
 	// runs before all tests in this block
-    before(function() {
-    	return new Promise(async function(resolve,reject){
+    before(async function() {
 		 try{
 		 	let balancesTable = await pool.query("CREATE TABLE balances (accountNumber VARCHAR(20) NOT NULL UNIQUE, balance DECIMAL(13,4));");
 		 	let transactionsTable = await pool.query("CREATE TABLE transactions(transactionRef varchar(40) NOT NULL UNIQUE, amount DECIMAL(13,4) NOT NULL, "+
@@ -19,25 +18,20 @@ describe('Tests', function() {
 		 	let insertBalance1 = await pool.query("insert into balances values('gokul@gmail.com',500);");
 		 	let insertBalance2 = await pool.query("insert into balances values('abhi@gmail.com',1000);");
 		 	let insertBalance3 = await pool.query("insert into balances values('avesh@gmail.com',750);");
-		 	resolve("Initital set up done");
+		 	console.log("Initital set up done");
 		 }catch(err){
-		 	reject({"status":"FAILURE",
-		 			 "errors":err});
+		 	console.log("Some error");
 		 }
-		});
     });
     // runs after all tests in this block
-    after(function() {
-    	return new Promise(async function(resolve,reject){
+    after(async function() {
 		try{
 			let dropbalance = await pool.query("drop table balances;");
 		 	let droptransaction = await pool.query("drop table transactions;");
-		 	resolve([dropbalance,droptransaction]);
+		 	console.log("Drop databases");
 		}catch(err){
-			reject({"status":"FAILURE",
-		 			 "errors":err});
+			console.log("Some error");
 		}
-		});
     });
 
     beforeEach(function() {
@@ -91,6 +85,19 @@ describe('Tests', function() {
     		});
     });
 
+    it('Should return error for wrong to account', function(done){
+    	api.post('/transactions')
+    		.send({
+    			"from" : "gokul@gmail.com",
+    			"to" : "abhi123@gmail.com",
+    			"amount" : 5
+    		}).end(function (err,res){
+    			expect(res.body).to.not.equal(null);
+    			expect(res.body.status).to.equal('failure');
+    			done();
+    		});
+    });
+
     it('Should return error for wrong amount', function(done){
     	api.post('/transactions')
     		.send({
@@ -104,12 +111,12 @@ describe('Tests', function() {
     		});
     });
 
-    it('Transfers 10 bucks to Abhi from Gokul', function(done){
+    it('Transfers 100 bucks to Abhi from Gokul', function(done){
     	api.post('/transactions')
     		.send({
     			"from" : "gokul@gmail.com",
     			"to" : "abhi@gmail.com",
-    			"amount" : 10
+    			"amount" : 100
     		}).end(function (err,res){
     			expect(res.body).to.not.equal(null);
     			expect(res.body.status).to.equal('success');
