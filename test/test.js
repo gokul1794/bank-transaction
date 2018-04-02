@@ -87,7 +87,7 @@ describe('Tests', function() {
             .send({
                 "from": "gokul@gmail.com",
                 "to": "abhi@gmail.com",
-                "amount": -5
+                "amount": -100
             }).end(function(err, res) {
                 expect(res.body).to.not.equal(null);
                 expect(res.body.status).to.equal('failure');

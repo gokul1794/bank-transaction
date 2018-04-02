@@ -139,8 +139,7 @@ let updateAccount = async (request, operator, connection) => {
 let insertIntoTransaction = async (request, connection) => {
     try {
         const referenceNo = uuidv1();
-        let sqlStatement = "insert into transactions (transactionRef,amount,fromAccount,toAccount,transactionDate)" +
-            "values(?,?,?,?,CURRENT_TIMESTAMP());"
+        let sqlStatement = "insert into transactions (transactionRef,amount,fromAccount,toAccount,transactionDate) values(?,?,?,?,CURRENT_TIMESTAMP());"
         result3 = await connection.query(sqlStatement, [referenceNo, request.amount, request.from, request.to], (error, result3) => {
             if (error) {
                 console.log("Error while inserting to Transaction table;Roll back");
