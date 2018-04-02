@@ -63,10 +63,8 @@ app.post('/transactions', asyncMiddleware( async(req,res,next)=>{
 function checkSimilarTransaction(request){
 	return new Promise(async function(resolve,reject){
 		try{
-			let result = await pool.query("select * from transactions where fromAccount ='"+
-		 request.from+"' and toAccount = '"+request.to+
-		 "'and amount = "+request.amount+
-		 " order by transactionDate desc limit 1;");
+		 let sqlStatement = "select * from transactions where fromAccount = ? and toAccount = ? and amount = ? order by transactionDate desc limit 1;"
+		 let result = await pool.query(sqlStatement,[request.from,request.to,request.amount]);
 		if(result[0]){
 			let timeDifference = ((new Date())-result[0].transactionDate)/1000;
 			if(timeDifference<transferTwiceTimeOut){
@@ -146,8 +144,8 @@ function updateBalance(request){
 function updateFromAccount(request,connection){
 	return new Promise(async function(resolve,reject){
 		try{
-			connection.query("UPDATE balances SET balances.balance = balances.balance-"
-		 		+request.amount+" where balances.accountNumber = '"+request.from+"'",function(error,result){
+			let sqlStatement = "UPDATE balances SET balances.balance = balances.balance-? where balances.accountNumber = ?";
+			connection.query(sqlStatement,[request.amount,request.from],function(error,result){
 		 			if(error){
 		 				console.log("Error while updating to balances table fromAccount;Roll back");
 		 				return connection.rollback(function() {
@@ -168,8 +166,8 @@ function updateFromAccount(request,connection){
 function updateToAccount(request,connection){
 	return new Promise(async function(resolve,reject){
 		try{
-				connection.query("UPDATE balances SET balances.balance = balances.balance+"
-		 		+request.amount+" where balances.accountNumber = '"+request.to+"'",function(error,result){
+			let sqlStatement = "UPDATE balances SET balances.balance = balances.balance+? where balances.accountNumber = ?"
+				connection.query(sqlStatement,[request.amount,request.to],function(error,result){
 		 			if(error){
 		 				console.log("Error while updating to balances table for toAccount;Roll back");
 		 				return connection.rollback(function() {
@@ -191,9 +189,9 @@ function insertIntoTransaction(request,connection){
 	return new Promise(async function(resolve,reject){
 		try{
 			const referenceNo = uuidv1();
-			result3 = connection.query("insert into transactions (transactionRef,amount,fromAccount,toAccount,transactionDate) values('"
-				+referenceNo+"',"+request.amount+",'"+request.from+"','"+request.to
-				+"',CURRENT_TIMESTAMP());",function(error,result3){
+			let sqlStatement = "insert into transactions (transactionRef,amount,fromAccount,toAccount,transactionDate)"+
+			 "values(?,?,?,?,CURRENT_TIMESTAMP());"
+			result3 = connection.query(sqlStatement,[referenceNo,request.amount,request.from,request.to],function(error,result3){
 		 			if(error){
 		 				console.log("Error while inserting to Transaction table;Roll back");
 		 				return connection.rollback(function() {
@@ -225,14 +223,14 @@ function insertIntoTransaction(request,connection){
 function getTransaction(transactionId,connection){
 	return new Promise(async function(resolve,reject){
 		try{
-			let response = connection.query("select * from transactions where transactions.transactionRef='"
-				+transactionId+"';", function(error,result,fields){
+			let sqlStatement = "select * from transactions where transactions.transactionRef=?;"
+			let response = connection.query(sqlStatement,[transactionId], function(error,result,fields){
         				//console.log(response);
         				if(error){
         					console.log("Transaction saved but couldn't fetch details.");
         					resolve("Transaction saved but couldn't fetch details.");
         				}
-        				console.log(JSON.stringify(result));
+        				//console.log(JSON.stringify(result));
         				resolve(result);
         			});
 		}catch(err){
@@ -246,8 +244,8 @@ function getTransaction(transactionId,connection){
 function checkifAccountExists(id,amount){
 	return new Promise(async function(resolve,reject){
 		 try{
-		 	let result = await pool.query("SELECT * FROM balances WHERE balances.accountNumber = '"
-		 		+id+"' and balances.balance>="+amount+" LIMIT 1");
+		 	let sqlStatement = "SELECT * FROM balances WHERE balances.accountNumber = ? and balances.balance>=? LIMIT 1"
+		 	let result = await pool.query(sqlStatement,[id,amount]);
 		 	//console.log("Result "+JSON.stringify(result[0]));
 		 	resolve(result[0]);
 		 }catch(err){
