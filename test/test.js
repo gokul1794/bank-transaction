@@ -42,22 +42,6 @@ describe('Tests', function() {
         // runs after each test in this block
     });
     // test cases
-    //Gets all balances
-    it('Get Balances', async () => {
-        const result = await app.getBalances();
-        expect(result.length).to.equal(3);
-    });
-
-    it('should return a 200 response', function(done) {
-        api.get('/')
-            .set('Accept', 'application/json')
-            .expect(200)
-            .end(function(err, res) {
-                expect(res.body).to.not.equal(null);
-                expect(res.body.message).to.equal('Hello world! My first Node app.');
-                done();
-            });
-    });
 
     it('Should return errors for invalid request body', function(done) {
         api.post('/transactions')
@@ -172,3 +156,4 @@ describe('Tests', function() {
                     });
             });
     });
+});

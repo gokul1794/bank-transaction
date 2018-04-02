@@ -18,10 +18,6 @@ app.use(bodyParser.urlencoded({
 app.use(bodyParser.json())
 app.use(validator());
 
-app.get('/', (req, res) => res.send({
-    'message': 'Hello world! My first Node app.'
-}));
-
 app.post('/transactions', asyncMiddleware(async (req, res, next) => {
     req.checkBody("from", "Enter a valid email address.").isEmail().exists();
     req.checkBody("to", "Enter a valid email address.").isEmail().exists();
@@ -40,7 +36,7 @@ app.post('/transactions', asyncMiddleware(async (req, res, next) => {
         let checkifToAccountExists = await checkifAccountExists(req.body.to, 0);
 
         if (checkifToAccountExists && checkifFromExistsWithBalance) {
-            pool.getConnection(function(err, connection) {
+            pool.getConnection((err, connection) => {
                 connection.beginTransaction(async function(err) {
                     if (err) {
                         console.log("Couldn't begin transaction"); //Transaction Error (Rollback and release connection)
@@ -54,8 +50,8 @@ app.post('/transactions', asyncMiddleware(async (req, res, next) => {
                     }
                     let similarTransactionCheck = await checkSimilarTransaction(req.body);
                     if (similarTransactionCheck.status === SUCCESS) {
-                        let updateFrom = await updateFromAccount(req.body, connection);
-                        let updateTo = await updateToAccount(req.body, connection);
+                        let updateFrom = await updateAccount(req.body, true, connection);
+                        let updateTo = await updateAccount(req.body, false, connection);
                         let insertTrans = await insertIntoTransaction(req.body, connection);
                         let result = await getTransaction(insertTrans, connection, function(data) {
                             res.send({
@@ -86,7 +82,7 @@ app.post('/transactions', asyncMiddleware(async (req, res, next) => {
 }));
 
 /* Checking if similar transactions exist*/
-async function checkSimilarTransaction(request) {
+let checkSimilarTransaction = async (request) => {
     try {
         let sqlStatement = "select * from transactions where fromAccount = ? and toAccount = ? and amount = ? order by transactionDate desc limit 1;"
         let result = await pool.query(sqlStatement, [request.from, request.to, request.amount]);
@@ -117,11 +113,12 @@ async function checkSimilarTransaction(request) {
         };
     }
 }
-/* Updates From account's balance */
-async function updateFromAccount(request, connection) {
+/* Updates From and To account's balance respectively */
+let updateAccount = async (request, operator, connection) => {
     try {
-        let sqlStatement = "UPDATE balances SET balances.balance = balances.balance-? where balances.accountNumber = ?";
-        let response = await connection.query(sqlStatement, [request.amount, request.from], function(error, result) {
+        let sqlStatement = operator ? "UPDATE balances SET balances.balance = balances.balance-? where balances.accountNumber = ?" : "UPDATE balances SET balances.balance = balances.balance+? where balances.accountNumber = ?";
+        let requestPerson = operator ? request.from : request.to;
+        let response = await connection.query(sqlStatement, [request.amount, requestPerson], (error, result) => {
             if (error) {
                 console.log("Error while updating to balances table fromAccount;Roll back");
                 return connection.rollback();
@@ -138,32 +135,13 @@ async function updateFromAccount(request, connection) {
     }
 }
 
-/* Updates to account's balance */
-async function updateToAccount(request, connection) {
-    try {
-        let sqlStatement = "UPDATE balances SET balances.balance = balances.balance+? where balances.accountNumber = ?"
-        let response = await connection.query(sqlStatement, [request.amount, request.to], function(error, result) {
-            if (error) {
-                console.log("Error while updating to balances table for toAccount;Roll back");
-                return connection.rollback();
-            }
-        });
-    } catch (err) {
-        console.log(err);
-        return {
-            "status": FAILURE,
-            "errors": err
-        };
-    }
-}
-
 /* Inserts into the transaction table */
-async function insertIntoTransaction(request, connection) {
+let insertIntoTransaction = async (request, connection) => {
     try {
         const referenceNo = uuidv1();
         let sqlStatement = "insert into transactions (transactionRef,amount,fromAccount,toAccount,transactionDate)" +
             "values(?,?,?,?,CURRENT_TIMESTAMP());"
-        result3 = await connection.query(sqlStatement, [referenceNo, request.amount, request.from, request.to], function(error, result3) {
+        result3 = await connection.query(sqlStatement, [referenceNo, request.amount, request.from, request.to], (error, result3) => {
             if (error) {
                 console.log("Error while inserting to Transaction table;Roll back");
                 return connection.rollback();
@@ -175,8 +153,6 @@ async function insertIntoTransaction(request, connection) {
                 }
             });
         });
-        console.log("referenceNo");
-        //console.log(referenceNo)
         return referenceNo;
     } catch (err) {
         console.log(err);
@@ -188,11 +164,11 @@ async function insertIntoTransaction(request, connection) {
 }
 
 /* Get transaction by transactionId */
-async function getTransaction(transactionId, connection, callback) {
+let getTransaction = async (transactionId, connection, callback) => {
     try {
         console.log(transactionId);
         let sqlStatement = "select * from transactions where transactions.transactionRef=?;"
-        let response = await connection.query(sqlStatement, [transactionId], function(err, result) {
+        let response = await connection.query(sqlStatement, [transactionId], (err, result) => {
             callback(result)
         });
     } catch (err) {
@@ -205,11 +181,10 @@ async function getTransaction(transactionId, connection, callback) {
 }
 
 /* Check if account exists with balance */
-async function checkifAccountExists(id, amount) {
+let checkifAccountExists = async (id, amount) => {
     try {
         let sqlStatement = "SELECT * FROM balances WHERE balances.accountNumber = ? and balances.balance>=? LIMIT 1"
         let result = await pool.query(sqlStatement, [id, amount]);
-        //console.log("Result "+JSON.stringify(result[0]));
         return result[0];
     } catch (err) {
         console.log(err);
@@ -220,28 +195,12 @@ async function checkifAccountExists(id, amount) {
     }
 }
 
-async function getBalances() {
-    try {
-        let result = await pool.query('select * from balances');
-        //console.log("Result "+JSON.stringify(result[0]));
-        return result;
-    } catch (err) {
-        console.log(err);
-        return {
-            "status": FAILURE,
-            "errors": err
-        };
-    }
-}
-
 module.exports = {
-    getBalances: getBalances,
-    checkifAccountExists: checkifAccountExists,
-    getTransaction: getTransaction,
-    insertIntoTransaction: insertIntoTransaction,
-    updateToAccount: updateToAccount,
-    updateFromAccount: updateFromAccount,
-    checkSimilarTransaction: checkSimilarTransaction
+    checkifAccountExists,
+    getTransaction,
+    insertIntoTransaction,
+    updateAccount,
+    checkSimilarTransaction
 }
 
 app.listen(3000, () => console.log('Bank transaction example.'))
