@@ -2,6 +2,7 @@ const express = require('express')
 const bodyParser = require('body-parser');
 var pool = require('./database')
 var asyncMiddleware = require('./asyncMiddleware');
+var mysql = require('mysql')
 const uuidv1 = require('uuid/v1');
 
 const transferTwiceTimeOut = 10;
@@ -84,8 +85,10 @@ app.post('/transactions', asyncMiddleware(async (req, res, next) => {
 /* Checking if similar transactions exist*/
 let checkSimilarTransaction = async (request) => {
     try {
-        let sqlStatement = "select * from transactions where fromAccount = ? and toAccount = ? and amount = ? order by transactionDate desc limit 1;"
-        let result = await pool.query(sqlStatement, [request.from, request.to, request.amount]);
+        let query = "select * from transactions where fromAccount = ? and toAccount = ? and amount = ? order by transactionDate desc limit 1;"
+        let inserts = [request.from, request.to, request.amount];
+        let sqlStatement = mysql.format(query,inserts);
+        let result = await pool.query(sqlStatement);
         if (result[0]) {
             let timeDifference = ((new Date()) - result[0].transactionDate) / 1000;
             if (timeDifference < transferTwiceTimeOut) {
@@ -116,9 +119,11 @@ let checkSimilarTransaction = async (request) => {
 /* Updates From and To account's balance respectively */
 let updateAccount = async (request, operator, connection) => {
     try {
-        let sqlStatement = operator ? "UPDATE balances SET balances.balance = balances.balance-? where balances.accountNumber = ?" : "UPDATE balances SET balances.balance = balances.balance+? where balances.accountNumber = ?";
+        let query = operator ? "UPDATE balances SET balances.balance = balances.balance-? where balances.accountNumber = ?" : "UPDATE balances SET balances.balance = balances.balance+? where balances.accountNumber = ?";
         let requestPerson = operator ? request.from : request.to;
-        let response = await connection.query(sqlStatement, [request.amount, requestPerson], (error, result) => {
+        let inserts = [request.amount, requestPerson];
+        let sqlStatement = mysql.format(query,inserts);
+        let response = await connection.query(sqlStatement, (error, result) => {
             if (error) {
                 console.log("Error while updating to balances table fromAccount;Roll back");
                 return connection.rollback();
@@ -139,8 +144,10 @@ let updateAccount = async (request, operator, connection) => {
 let insertIntoTransaction = async (request, connection) => {
     try {
         const referenceNo = uuidv1();
-        let sqlStatement = "insert into transactions (transactionRef,amount,fromAccount,toAccount,transactionDate) values(?,?,?,?,CURRENT_TIMESTAMP());"
-        result3 = await connection.query(sqlStatement, [referenceNo, request.amount, request.from, request.to], (error, result3) => {
+        let query = "insert into transactions (transactionRef,amount,fromAccount,toAccount,transactionDate) values(?,?,?,?,CURRENT_TIMESTAMP());"
+        let inserts = [referenceNo, request.amount, request.from, request.to]
+        let sqlStatement = mysql.format(query,inserts);
+        result3 = await connection.query(sqlStatement, (error, result3) => {
             if (error) {
                 console.log("Error while inserting to Transaction table;Roll back");
                 return connection.rollback();
@@ -166,8 +173,10 @@ let insertIntoTransaction = async (request, connection) => {
 let getTransaction = async (transactionId, connection, callback) => {
     try {
         console.log(transactionId);
-        let sqlStatement = "select * from transactions where transactions.transactionRef=?;"
-        let response = await connection.query(sqlStatement, [transactionId], (err, result) => {
+        let query = "select * from transactions where transactions.transactionRef=?;";
+        let inserts = [transactionId];
+        let sqlStatement = mysql.format(query,inserts);
+        let response = await connection.query(sqlStatement, (err, result) => {
             callback(result)
         });
     } catch (err) {
@@ -182,8 +191,10 @@ let getTransaction = async (transactionId, connection, callback) => {
 /* Check if account exists with balance */
 let checkifAccountExists = async (id, amount) => {
     try {
-        let sqlStatement = "SELECT * FROM balances WHERE balances.accountNumber = ? and balances.balance>=? LIMIT 1"
-        let result = await pool.query(sqlStatement, [id, amount]);
+        let query = "SELECT * FROM balances WHERE balances.accountNumber = ? and balances.balance>=? LIMIT 1"
+        let inserts =  [id, amount];
+        let sqlStatement = mysql.format(query,inserts);
+        let result = await pool.query(sqlStatement);
         return result[0];
     } catch (err) {
         console.log(err);
