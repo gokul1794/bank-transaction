@@ -2,7 +2,8 @@ var app = require('../app.js');
 var assert = require('assert');
 var expect = require('expect.js');
 
-var pool = require('../database');
+var db = require('../database');
+var pool = db.pool;
 
 var should = require('chai').should(),
     supertest = require('supertest'),

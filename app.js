@@ -1,8 +1,9 @@
 const express = require('express')
 const bodyParser = require('body-parser');
-var pool = require('./database')
+var db = require('./database');
+var pool = db.pool;
+var mysql = db.mysql;
 var asyncMiddleware = require('./asyncMiddleware');
-var mysql = require('mysql')
 const uuidv1 = require('uuid/v1');
 
 const transferTwiceTimeOut = 10;
@@ -203,14 +204,6 @@ let checkifAccountExists = async (id, amount) => {
             "errors": err
         };
     }
-}
-
-module.exports = {
-    checkifAccountExists,
-    getTransaction,
-    insertIntoTransaction,
-    updateAccount,
-    checkSimilarTransaction
 }
 
 app.listen(3000, () => console.log('Bank transaction example.'))
