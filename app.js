@@ -33,42 +33,18 @@ app.post('/transactions', asyncMiddleware(async (req, res, next) => {
         return;
     }
     if (req.body.amount > 1 && req.body.from !== req.body.to) {
-
         let checkifFromExistsWithBalance = await checkifAccountExists(req.body.from, req.body.amount);
         let checkifToAccountExists = await checkifAccountExists(req.body.to, 0);
 
         if (checkifToAccountExists && checkifFromExistsWithBalance) {
-            pool.getConnection((err, connection) => {
-                connection.beginTransaction(async function(err) {
-                    if (err) {
-                        console.log("Couldn't begin transaction"); //Transaction Error (Rollback and release connection)
-                        connection.rollback(function() {
-                            connection.release();
-                            res.send({
-                                "status": FAILURE,
-                                "errors": err
-                            });
-                        });
-                    }
-                    let similarTransactionCheck = await checkSimilarTransaction(req.body);
-                    if (similarTransactionCheck.status === SUCCESS) {
-                        let updateFrom = await updateAccount(req.body, true, connection);
-                        let updateTo = await updateAccount(req.body, false, connection);
-                        let insertTrans = await insertIntoTransaction(req.body, connection);
-                        let result = await getTransaction(insertTrans, connection, function(data) {
-                            res.send({
-                                "status": SUCCESS,
-                                "data": data
-                            });
-                        });
-                    } else {
-                        res.send({
-                            "status": FAILURE,
-                            "errors": similarTransactionCheck.data
-                        });
-                    }
-                });
+
+            var poolConnection = await pool.getConnection(async function (err, connection) {
+                let transferTransaction = await startTransaction(req, connection, transactionCallback);
             });
+
+            function transactionCallback(data) {
+                res.send(data);
+            }
         } else {
             res.send({
                 "status": FAILURE,
@@ -83,12 +59,45 @@ app.post('/transactions', asyncMiddleware(async (req, res, next) => {
     }
 }));
 
+let startTransaction = async (req, connection, transactionCallback) => {
+    console.log("Inside Transaction");
+    connection.beginTransaction(async function (err, result) {
+        if (err) {
+            console.log("Couldn't begin transaction"); //Transaction Error (Rollback and release connection)
+            connection.rollback(function () {
+                connection.release();
+                transactionCallback({
+                    "status": FAILURE,
+                    "errors": err
+                });
+            });
+        }
+        let similarTransactionCheck = await checkSimilarTransaction(req.body);
+        if (similarTransactionCheck.status === SUCCESS) {
+            let updateFrom = await updateAccount(req.body, true, connection);
+            let updateTo = await updateAccount(req.body, false, connection);
+            let insertTrans = await insertIntoTransaction(req.body, connection);
+            let result = await getTransaction(insertTrans, connection, function (data) {
+                transactionCallback({
+                    "status": SUCCESS,
+                    "data": data
+                });
+            });
+        } else {
+            transactionCallback({
+                "status": FAILURE,
+                "errors": similarTransactionCheck.data
+            });
+        }
+    });
+}
+
 /* Checking if similar transactions exist*/
 let checkSimilarTransaction = async (request) => {
     try {
         let query = "select * from transactions where fromAccount = ? and toAccount = ? and amount = ? order by transactionDate desc limit 1;"
         let inserts = [request.from, request.to, request.amount];
-        let sqlStatement = mysql.format(query,inserts);
+        let sqlStatement = mysql.format(query, inserts);
         let result = await pool.query(sqlStatement);
         if (result[0]) {
             let timeDifference = ((new Date()) - result[0].transactionDate) / 1000;
@@ -123,7 +132,7 @@ let updateAccount = async (request, operator, connection) => {
         let query = operator ? "UPDATE balances SET balances.balance = balances.balance-? where balances.accountNumber = ?" : "UPDATE balances SET balances.balance = balances.balance+? where balances.accountNumber = ?";
         let requestPerson = operator ? request.from : request.to;
         let inserts = [request.amount, requestPerson];
-        let sqlStatement = mysql.format(query,inserts);
+        let sqlStatement = mysql.format(query, inserts);
         let response = await connection.query(sqlStatement, (error, result) => {
             if (error) {
                 console.log("Error while updating to balances table fromAccount;Roll back");
@@ -147,13 +156,13 @@ let insertIntoTransaction = async (request, connection) => {
         const referenceNo = uuidv1();
         let query = "insert into transactions (transactionRef,amount,fromAccount,toAccount,transactionDate) values(?,?,?,?,CURRENT_TIMESTAMP());"
         let inserts = [referenceNo, request.amount, request.from, request.to]
-        let sqlStatement = mysql.format(query,inserts);
+        let sqlStatement = mysql.format(query, inserts);
         result3 = await connection.query(sqlStatement, (error, result3) => {
             if (error) {
                 console.log("Error while inserting to Transaction table;Roll back");
                 return connection.rollback();
             }
-            connection.commit(function(err) {
+            connection.commit(function (err) {
                 if (err) {
                     console.log("Couldn't commit transaction;Roll back");
                     return connection.rollback();
@@ -176,7 +185,7 @@ let getTransaction = async (transactionId, connection, callback) => {
         console.log(transactionId);
         let query = "select * from transactions where transactions.transactionRef=?;";
         let inserts = [transactionId];
-        let sqlStatement = mysql.format(query,inserts);
+        let sqlStatement = mysql.format(query, inserts);
         let response = await connection.query(sqlStatement, (err, result) => {
             callback(result)
         });
@@ -193,8 +202,8 @@ let getTransaction = async (transactionId, connection, callback) => {
 let checkifAccountExists = async (id, amount) => {
     try {
         let query = "SELECT * FROM balances WHERE balances.accountNumber = ? and balances.balance>=? LIMIT 1"
-        let inserts =  [id, amount];
-        let sqlStatement = mysql.format(query,inserts);
+        let inserts = [id, amount];
+        let sqlStatement = mysql.format(query, inserts);
         let result = await pool.query(sqlStatement);
         return result[0];
     } catch (err) {
